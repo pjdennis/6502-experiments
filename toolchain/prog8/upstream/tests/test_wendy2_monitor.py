@@ -13,12 +13,15 @@ from __future__ import annotations
 import os, shutil, subprocess, tempfile, unittest
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[4] / "firmware" / "vasm"
+
 HERE = Path(__file__).resolve().parent
 UP = HERE.parent
 REPO = UP.parents[2]
 EMU = REPO / "emulator" / "emulator.out"
 JAR = Path(os.environ.get("PROG8C", "/tmp/prog8c.jar"))
-MON_SRC = REPO / "wendy2c_monitor.s"
+MON_SRC = REPO / "firmware" / "boards" / "wendy2" / "wendy2c_monitor.s"
 GOLDENS = HERE / "goldens"
 OUT = UP / "out"
 
@@ -67,7 +70,7 @@ def _monitor_rom() -> Path:
     OUT.mkdir(parents=True, exist_ok=True)
     rom = OUT / "wendy2c_monitor.bin"
     r = subprocess.run(
-        ["vasm6502_oldstyle", "-wdc02", "-wfail", "-Fbin", "-dotdir",
+        [str(FW_VASM), "-wdc02", "-wfail", "-Fbin", "-dotdir",
          "-ignore-mult-inc", "-esc", "-o", str(rom), str(MON_SRC)],
         cwd=str(REPO), capture_output=True, text=True)
     if r.returncode != 0:

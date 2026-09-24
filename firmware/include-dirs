@@ -1,0 +1,15 @@
+# vasm include path for all firmware, relative to the repository root.
+# Read by firmware/vasm and tools/firmware_manifest.py (--include-list).
+# Programs .include libraries and board configs by bare file name, so file
+# names must stay unique across these directories.
+firmware/boards/wendy
+firmware/boards/michael
+firmware/boards/wendy2
+firmware/lib/core
+firmware/lib/console
+firmware/lib/lcd
+firmware/lib/graphics
+firmware/lib/keyboard
+firmware/lib/sound
+firmware/lib/tasks
+firmware/lib/serial

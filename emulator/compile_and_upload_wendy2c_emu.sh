@@ -112,7 +112,7 @@ bin="$OUT_DIR/${base}.bin"
 log="$OUT_DIR/${base}.vasm.log"
 
 [ "$VERBOSE" -eq 1 ] && echo ">> assembling $SRC -> $bin"
-if ! "$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
+if ! "$SCRIPT_DIR/../firmware/vasm" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
         -o "$bin" "$SRC" >"$log" 2>&1; then
     echo "error: vasm failed assembling $SRC (full log: $log):" >&2
     cat "$log" >&2

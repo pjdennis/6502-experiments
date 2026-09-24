@@ -108,7 +108,12 @@ mkdir -p "$OUT_DIR"
 # Default payload is the existing "Hi! I'm Wendy 2." program; override
 # via DEMO_PAYLOAD env to point at any other wendy2c .s file that
 # assembles to load at $4000.
-PAYLOAD_SRC="${DEMO_PAYLOAD:-$REPO_ROOT/hello_ram_4000_wendy2c.s}"
+FW="$REPO_ROOT/firmware"
+PAYLOAD_SRC="${DEMO_PAYLOAD:-$FW/programs/wendy2/hello_ram_4000_wendy2c.s}"
+# A bare file name is looked up in firmware/programs/wendy2/.
+if [ ! -f "$PAYLOAD_SRC" ] && [ -f "$FW/programs/wendy2/$PAYLOAD_SRC" ]; then
+    PAYLOAD_SRC="$FW/programs/wendy2/$PAYLOAD_SRC"
+fi
 
 VASM=vasm6502_oldstyle
 command -v "$VASM" >/dev/null 2>&1 || {
@@ -125,7 +130,7 @@ run_vasm() {
     out=$1
     src=$2
     log="$OUT_DIR/$(basename "$src").vasm.log"
-    if ! "$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
+    if ! "$FW/vasm" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
             -o "$out" "$src" >"$log" 2>&1; then
         echo "error: vasm failed assembling $src (full log: $log):" >&2
         cat "$log" >&2
@@ -137,7 +142,7 @@ run_vasm() {
 cd "$REPO_ROOT"
 
 echo ">> assembling boot ROM (upload_and_run_eeprom_wendy2c.s)"
-run_vasm "$OUT_DIR/wendy2c_boot.bin" upload_and_run_eeprom_wendy2c.s
+run_vasm "$OUT_DIR/wendy2c_boot.bin" "$FW/boards/wendy2/upload_and_run_eeprom_wendy2c.s"
 
 echo ">> assembling payload ($PAYLOAD_SRC)"
 run_vasm "$OUT_DIR/payload.bin" "$PAYLOAD_SRC"

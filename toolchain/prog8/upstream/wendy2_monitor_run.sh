@@ -13,7 +13,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PROG8="$HERE/.."; REPO="$PROG8/../.."
 JAR="${PROG8C:-/tmp/prog8c.jar}"
 EMU="$REPO/emulator/emulator.out"
-MON_SRC="$REPO/wendy2c_monitor.s"
+MON_SRC="$REPO/firmware/boards/wendy2/wendy2c_monitor.s"
 
 SRC="$1"; CAP="${2:-4000000}"
 [ -n "$SRC" ] || { echo "usage: $0 demos/foo.p8 [cap] [extra disk files...]"; exit 2; }
@@ -28,7 +28,7 @@ OUT="$HERE/out/$base"; mkdir -p "$OUT"
 
 # build the monitor ROM (cached)
 MON="$HERE/out/wendy2c_monitor.bin"
-[ -f "$MON" ] || ( cd "$REPO" && vasm6502_oldstyle -wdc02 -wfail -Fbin -dotdir \
+[ -f "$MON" ] || ( cd "$REPO" && firmware/vasm -wdc02 -wfail -Fbin -dotdir \
         -ignore-mult-inc -esc -o "$MON" "$MON_SRC" ) >/dev/null
 
 # stage a temp disk: program named <base>, autoexec naming it, + extras

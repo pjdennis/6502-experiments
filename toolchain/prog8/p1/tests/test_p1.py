@@ -28,6 +28,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[4] / "firmware" / "vasm"
+
 HERE = Path(__file__).resolve().parent
 P1 = HERE.parent
 PROG8 = P1.parent
@@ -68,7 +71,7 @@ def build_p1_upstream(workdir: Path, src: Path = P1_SRC) -> Path:
 
 
 WENDY2_PROPS = "wendy2_selfhost.properties"  # 65c02, load $0200, memtop $C000
-BOOT_SRC = REPO / "upload_and_run_eeprom_wendy2c.s"
+BOOT_SRC = REPO / "firmware" / "boards" / "wendy2" / "upload_and_run_eeprom_wendy2c.s"
 
 
 def build_p1_wendy(workdir: Path, src: Path = P1_SRC):
@@ -91,7 +94,7 @@ def build_p1_wendy(workdir: Path, src: Path = P1_SRC):
         prog_bin.write_bytes(built.read_bytes())
     boot_rom = workdir / "boot.bin"
     r = subprocess.run(
-        ["vasm6502_oldstyle", "-wdc02", "-wfail", "-Fbin", "-dotdir",
+        [str(FW_VASM), "-wdc02", "-wfail", "-Fbin", "-dotdir",
          "-ignore-mult-inc", "-esc", "-o", str(boot_rom), str(BOOT_SRC)],
         capture_output=True, text=True)
     assert r.returncode == 0, f"boot ROM vasm failed:\n{r.stdout}\n{r.stderr}"
@@ -863,7 +866,7 @@ class P1SelfHost(unittest.TestCase):
             capture_output=True, text=True, cwd=str(PROG8))
         assert r.returncode == 0, f"p8c {name} failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(
-            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+            [str(FW_VASM), "-Fbin", "-dotdir", "-ignore-mult-inc",
              "-esc", "-wfail", "-o", str(bin_path), str(s_path)],
             capture_output=True, text=True)
         assert r.returncode == 0, f"vasm {name} failed:\n{r.stdout}\n{r.stderr}"

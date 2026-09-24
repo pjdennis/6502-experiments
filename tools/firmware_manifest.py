@@ -119,7 +119,7 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('command', choices=['update', 'check'])
     parser.add_argument('--root', default='.')
-    parser.add_argument('--manifest', default='firmware-manifest.txt')
+    parser.add_argument('--manifest', default='firmware/manifest.txt')
     parser.add_argument('--exclude', action='append',
                         help=f'directory to skip, relative to root (default: {DEFAULT_EXCLUDES})')
     parser.add_argument('--include', action='append', default=[],

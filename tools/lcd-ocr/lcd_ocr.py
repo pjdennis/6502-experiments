@@ -36,7 +36,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[2]   # repository root (snap.sh, lcd_calibration.json live there)
 DEFAULT_INPUT = "/mnt/c/temp/wendy2-snap.jpg"
 WORKDIR = Path("/tmp/lcd-ocr")
 CALIB_JSON = REPO_ROOT / "lcd_calibration.json"

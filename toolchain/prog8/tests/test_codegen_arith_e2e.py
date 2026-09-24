@@ -20,6 +20,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[3] / "firmware" / "vasm"
+
 HERE = Path(__file__).resolve().parent
 PROG8 = HERE.parent
 REPO = PROG8.parents[1]
@@ -121,7 +124,7 @@ class DualScratchArith(unittest.TestCase):
             capture_output=True, text=True, cwd=str(PROG8))
         self.assertEqual(r.returncode, 0, msg=f"p8c:\n{r.stdout}\n{r.stderr}")
         r = subprocess.run(
-            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+            [str(FW_VASM), "-Fbin", "-dotdir", "-ignore-mult-inc",
              "-esc", "-wfail", "-o", str(binf), str(s)],
             capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, msg=f"vasm:\n{r.stdout}\n{r.stderr}")

@@ -44,4 +44,4 @@ if [ "$panel_set" -eq 0 ]; then
     set -- "$@" --lcd-panel 16x1-5x10
 fi
 
-exec ./emulator/demo_wendy2c.sh "$@"
+exec ../../../emulator/demo_wendy2c.sh "$@"

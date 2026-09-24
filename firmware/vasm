@@ -1,0 +1,10 @@
+#!/bin/sh
+# vasm6502_oldstyle with every firmware include directory (firmware/include-dirs)
+# on the -I path, so programs can .include libraries and board configs by name
+# from any directory. All other arguments are passed through unchanged.
+# Uses vasm6502_oldstyle from PATH, or the one in $VASM if set.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VASM="${VASM:-vasm6502_oldstyle}"
+INCLUDES=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' -e "s|^[[:space:]]*|-I$ROOT/|" "$ROOT/firmware/include-dirs")
+# shellcheck disable=SC2086  # word-split the -I list on purpose (no spaces in paths)
+exec "$VASM" $INCLUDES "$@"

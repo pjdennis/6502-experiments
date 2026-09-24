@@ -16,6 +16,7 @@ set -eu
 
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 EMU="$REPO_ROOT/emulator/emulator.out"
+FW="$REPO_ROOT/firmware"
 OUT="${OUT_DIR:-/tmp/wendy2c-serial-link-test}"
 VASM=vasm6502_oldstyle
 
@@ -35,7 +36,7 @@ run_vasm() {
     out=$1
     src=$2
     log="$OUT/$(basename "$src").vasm.log"
-    if ! "$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
+    if ! "$FW/vasm" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
             -o "$out" "$src" >"$log" 2>&1; then
         echo "wendy2c_serial_link: vasm failed assembling $src (log: $log)"
         cat "$log"
@@ -44,7 +45,7 @@ run_vasm() {
 }
 
 echo "wendy2c_serial_link: building boot ROM"
-run_vasm "$OUT/boot.bin" "$REPO_ROOT/upload_and_run_eeprom_wendy2c.s"
+run_vasm "$OUT/boot.bin" "$FW/boards/wendy2/upload_and_run_eeprom_wendy2c.s"
 
 run_case() {
     name=$1
@@ -53,7 +54,7 @@ run_case() {
     expected=$4
 
     echo "wendy2c_serial_link: case $name"
-    run_vasm "$OUT/$name.bin" "$REPO_ROOT/$payload_src"
+    run_vasm "$OUT/$name.bin" "$FW/programs/wendy2/$payload_src"
 
     sock="$OUT/$name.sock"
     rm -f "$sock"

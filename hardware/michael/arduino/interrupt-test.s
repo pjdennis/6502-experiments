@@ -35,8 +35,8 @@ SIMPLE_BUFFER           = $0300 ; 256 bytes
 
   .org $8000
 
-  .include ../full_screen_console.inc
-  .include ../simple_buffer.inc
+  .include full_screen_console.inc
+  .include simple_buffer.inc
 
 reset:
   ldx #$ff ; Initialize stack

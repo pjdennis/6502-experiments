@@ -22,7 +22,7 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[2]   # repository root (snap.sh, lcd_calibration.json live there)
 CALIB_JSON = REPO_ROOT / "lcd_calibration.json"
 C_HEADER = REPO_ROOT / "emulator/chips/hd44780_a00_font.h"
 JS_FILE = REPO_ROOT / "emulator/web/hd44780_a00_font.js"

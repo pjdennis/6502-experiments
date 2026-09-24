@@ -34,6 +34,9 @@ import sys
 import time
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[2] / "firmware" / "vasm"
+
 
 class Colors:
     RED = "\033[0;31m"; GREEN = "\033[0;32m"; YELLOW = "\033[0;33m"; NC = "\033[0m"
@@ -55,7 +58,7 @@ def have_playwright():
 
 def run_vasm(src, out_path, log_path):
     r = subprocess.run(
-        ["vasm6502_oldstyle", "-wdc02", "-wfail", "-Fbin", "-dotdir",
+        [str(FW_VASM), "-wdc02", "-wfail", "-Fbin", "-dotdir",
          "-ignore-mult-inc", "-esc", "-o", str(out_path), str(src)],
         capture_output=True, text=True
     )
@@ -64,8 +67,8 @@ def run_vasm(src, out_path, log_path):
 
 
 def build_artifacts(repo_root, out_dir):
-    boot_src    = repo_root / "upload_and_run_eeprom_wendy2c.s"
-    payload_src = repo_root / "cgram_test_wendy2c.s"
+    boot_src    = repo_root / "firmware" / "boards" / "wendy2" / "upload_and_run_eeprom_wendy2c.s"
+    payload_src = repo_root / "firmware" / "programs" / "wendy2" / "cgram_test_wendy2c.s"
     boot_rom    = out_dir / "boot.bin"
     payload_bin = out_dir / "cgram.bin"
     framed      = out_dir / "cgram.framed"

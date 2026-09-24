@@ -26,6 +26,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[3] / "firmware" / "vasm"
+
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -47,7 +50,7 @@ def build_tinyp8(force: bool = False) -> Path:
         return TINYP8_BIN
     TINYP8_BIN.parent.mkdir(exist_ok=True)
     r = subprocess.run(
-        ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+        [str(FW_VASM), "-Fbin", "-dotdir", "-ignore-mult-inc",
          "-esc", "-wfail", "-o", str(TINYP8_BIN), str(TINYP8_SRC)],
         capture_output=True, text=True,
     )

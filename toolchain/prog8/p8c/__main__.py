@@ -24,6 +24,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[3] / "firmware" / "vasm"
+
 from .codegen import CodeGenError, generate
 from .lex import LexError, lex
 from .parse import ParseError, parse
@@ -34,7 +37,7 @@ from .serialize import serialize, serialize_tokens
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EMULATOR = REPO_ROOT / "emulator" / "emulator.out"
 WENDY2_UPLOAD = REPO_ROOT / "emulator" / "wendy2_upload.py"
-BOOT_SRC = REPO_ROOT / "upload_and_run_eeprom_wendy2c.s"
+BOOT_SRC = REPO_ROOT / "firmware" / "boards" / "wendy2" / "upload_and_run_eeprom_wendy2c.s"
 
 
 def have(cmd: str) -> bool:
@@ -48,7 +51,7 @@ def run_vasm(src: Path, out_bin: Path) -> None:
     (base_config_wendy2c.inc, display_routines_4bit.inc, etc.) resolve.
     """
     r = subprocess.run(
-        ["vasm6502_oldstyle", "-wdc02", "-wfail", "-Fbin", "-dotdir",
+        [str(FW_VASM), "-wdc02", "-wfail", "-Fbin", "-dotdir",
          "-ignore-mult-inc", "-esc",
          "-o", str(out_bin), str(src)],
         cwd=str(REPO_ROOT), capture_output=True, text=True,

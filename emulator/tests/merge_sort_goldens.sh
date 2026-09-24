@@ -12,6 +12,7 @@ set -eu
 
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 EMU="$REPO_ROOT/emulator/emulator.out"
+FW="$REPO_ROOT/firmware"
 OUT="${OUT_DIR:-/tmp/wendy2c-merge-sort}"
 VASM=vasm6502_oldstyle
 
@@ -32,7 +33,7 @@ run_vasm() {
     src=$2
     shift 2
     log="$OUT/$(basename "$src").vasm.log"
-    if ! "$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
+    if ! "$FW/vasm" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
             "$@" -o "$out" "$src" >"$log" 2>&1; then
         echo "merge_sort_goldens: vasm failed assembling $src (log: $log)"
         cat "$log"
@@ -42,7 +43,7 @@ run_vasm() {
 
 # Boot ROM is shared with the other wendy2c tests.
 echo "merge_sort_goldens: building boot ROM"
-run_vasm "$OUT/boot.bin" "$REPO_ROOT/upload_and_run_eeprom_wendy2c.s"
+run_vasm "$OUT/boot.bin" "$FW/boards/wendy2/upload_and_run_eeprom_wendy2c.s"
 
 # Assert that every PATTERN appears in TRACE, in order. PATTERN is a
 # fixed-string substring (grep -F).
@@ -71,7 +72,7 @@ assert_trace_contains_in_order() {
 # primitives (read/write/advance with $EFFE -> $8000/cfg++ wraparound)
 # and displays "Cursor: OK" on PASS or "Cursor: FAIL@..." on failure.
 echo "merge_sort_goldens: case cursor_selftest"
-run_vasm "$OUT/cursor.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+run_vasm "$OUT/cursor.bin" "$FW/programs/wendy2/wendy2_merge_sort.s" \
     -DSELFTEST_CURSORS=1
 python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/cursor.bin" -o "$OUT/cursor.framed" >"$OUT/cursor.upload.log"
@@ -96,7 +97,7 @@ echo "  PASS cursor_selftest"
 # Default N for this build is 8 (overrides the file-level default of
 # 57344) -- enough to exercise fill+verify in a few thousand cycles.
 echo "merge_sort_goldens: case fill_selftest"
-run_vasm "$OUT/fill.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+run_vasm "$OUT/fill.bin" "$FW/programs/wendy2/wendy2_merge_sort.s" \
     -DSELFTEST_FILL=1 -DN_ELEMENTS=8
 python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/fill.bin" -o "$OUT/fill.framed" >"$OUT/fill.upload.log"
@@ -127,7 +128,7 @@ echo "  PASS fill_selftest"
 run_sort_selftest() {
     n=$1
     echo "merge_sort_goldens: case sort_selftest_n${n}"
-    run_vasm "$OUT/sort_n${n}.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+    run_vasm "$OUT/sort_n${n}.bin" "$FW/programs/wendy2/wendy2_merge_sort.s" \
         -DSELFTEST_SORT=1 -DN_ELEMENTS=$n
     python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
         "$OUT/sort_n${n}.bin" -o "$OUT/sort_n${n}.framed" \
@@ -155,7 +156,7 @@ run_sort_selftest 20
 # show_final. With a small N the trace should pass through the banner,
 # a sorting screen, and finish with 'Verify: PASS'.
 echo "merge_sort_goldens: case end_to_end_n64"
-run_vasm "$OUT/e2e.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+run_vasm "$OUT/e2e.bin" "$FW/programs/wendy2/wendy2_merge_sort.s" \
     -DN_ELEMENTS=64
 python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/e2e.bin" -o "$OUT/e2e.framed" >"$OUT/e2e.upload.log"
@@ -191,7 +192,7 @@ echo "  PASS end_to_end_n64"
 # so it's gated behind MERGE_SORT_FULL_N=1 to keep `make test` snappy.
 if [ "${MERGE_SORT_FULL_N:-0}" = "1" ]; then
     echo "merge_sort_goldens: case full_n57344 (slow)"
-    run_vasm "$OUT/full.bin" "$REPO_ROOT/wendy2_merge_sort.s"
+    run_vasm "$OUT/full.bin" "$FW/programs/wendy2/wendy2_merge_sort.s"
     python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
         "$OUT/full.bin" -o "$OUT/full.framed" >"$OUT/full.upload.log"
 

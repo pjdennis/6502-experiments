@@ -25,6 +25,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[4] / "firmware" / "vasm"
+
 HERE = Path(__file__).resolve().parent
 P1 = HERE.parent
 PROG8 = P1.parent
@@ -70,7 +73,7 @@ class LexerEquivalence(unittest.TestCase):
         )
         assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(
-            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+            [str(FW_VASM), "-Fbin", "-dotdir", "-ignore-mult-inc",
              "-esc", "-wfail", "-o", str(cls.lexer_bin), str(s_path)],
             capture_output=True, text=True,
         )

@@ -38,7 +38,7 @@ import numpy as np
 
 import lcd_ocr
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[2]   # repository root (snap.sh, lcd_calibration.json live there)
 SNAP_SH = REPO_ROOT / "snap.sh"
 CALIB_JSON = lcd_ocr.CALIB_JSON
 WORKDIR = lcd_ocr.WORKDIR

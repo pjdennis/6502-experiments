@@ -11,9 +11,9 @@
 # Also prints the decoded text to stdout.
 #
 # Calibration is required once before first use:
-#   ./compile_and_upload_wendy2.sh lcd_calibrate.s   # all 32 cells lit
-#   ./lcd_read --calibrate                            # save corners
-# After that, ./lcd_read just captures + decodes.
+#   tools/upload/compile_and_upload_wendy2.sh firmware/programs/wendy2/lcd_calibrate.s   # all 32 cells lit
+#   tools/lcd-ocr/lcd_read --calibrate                # save corners
+# After that, tools/lcd-ocr/lcd_read just captures + decodes.
 
 set -euo pipefail
 cd "$(dirname "$0")"

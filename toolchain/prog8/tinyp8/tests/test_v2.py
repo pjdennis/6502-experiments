@@ -19,6 +19,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[4] / "firmware" / "vasm"
+
 HERE = Path(__file__).resolve().parent
 TP8 = HERE.parent
 PROG8 = TP8.parent
@@ -57,7 +60,7 @@ class TinyP8V2(unittest.TestCase):
         self.assertEqual(r.returncode, 0,
                          msg=f"p8c failed:\n{r.stdout}\n{r.stderr}")
         r = subprocess.run(
-            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+            [str(FW_VASM), "-Fbin", "-dotdir", "-ignore-mult-inc",
              "-esc", "-wfail", "-o", str(self.p8_compiler), str(s_path)],
             capture_output=True, text=True,
         )

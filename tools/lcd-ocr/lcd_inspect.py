@@ -29,7 +29,7 @@ import numpy as np
 
 import lcd_ocr
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[2]   # repository root (snap.sh, lcd_calibration.json live there)
 WORKDIR = lcd_ocr.WORKDIR
 SCALE = 8   # warp upscale factor
 GUTTER = 4

@@ -22,7 +22,7 @@ failed=()
 
 firmware() {
   python3 -m unittest discover -s tools/tests &&
-    python3 tools/firmware_manifest.py check
+    python3 tools/firmware_manifest.py check --include-list firmware/include-dirs
 }
 
 asm1() {

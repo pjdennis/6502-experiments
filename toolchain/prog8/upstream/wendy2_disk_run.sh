@@ -12,7 +12,7 @@ PROG8="$HERE/.."; REPO="$PROG8/../.."
 JAR="${PROG8C:-/tmp/prog8c.jar}"
 EMU="$REPO/emulator/emulator.out"
 UPLOAD="$REPO/emulator/wendy2_upload.py"
-BOOT_SRC="$REPO/upload_and_run_eeprom_wendy2c.s"
+BOOT_SRC="$REPO/firmware/boards/wendy2/upload_and_run_eeprom_wendy2c.s"
 
 SRC="$1"; DISK="$2"; CAP="${3:-3000000}"
 [ -n "$SRC" ] && [ -n "$DISK" ] || { echo "usage: $0 demos/foo.p8 DISKDIR [cap]"; exit 2; }
@@ -29,7 +29,7 @@ python3 "$UPLOAD" "$OUT/$base.bin" -o "$OUT/$base.framed" >/dev/null
 
 if [ -z "$ROM" ]; then
     ROM="$HERE/out/wendy2c_boot.bin"
-    [ -f "$ROM" ] || ( cd "$REPO" && vasm6502_oldstyle -wdc02 -wfail -Fbin -dotdir \
+    [ -f "$ROM" ] || ( cd "$REPO" && firmware/vasm -wdc02 -wfail -Fbin -dotdir \
             -ignore-mult-inc -esc -o "$ROM" "$BOOT_SRC" ) >/dev/null
 fi
 

@@ -38,6 +38,9 @@ import sys
 import time
 from pathlib import Path
 
+# firmware/vasm: vasm6502_oldstyle with the firmware include path.
+FW_VASM = Path(__file__).resolve().parents[2] / "firmware" / "vasm"
+
 
 class Colors:
     RED = "\033[0;31m"
@@ -59,7 +62,7 @@ def have_vasm():
 
 def run_vasm(src, out_path, log_path):
     result = subprocess.run(
-        ["vasm6502_oldstyle", "-wdc02", "-wfail", "-Fbin", "-dotdir",
+        [str(FW_VASM), "-wdc02", "-wfail", "-Fbin", "-dotdir",
          "-ignore-mult-inc", "-esc", "-o", str(out_path), str(src)],
         capture_output=True, text=True
     )
@@ -69,8 +72,8 @@ def run_vasm(src, out_path, log_path):
 
 def build_artifacts(repo_root, out_dir):
     """Returns (boot_rom_path, framed_payload_path) or None on failure."""
-    boot_src = repo_root / "upload_and_run_eeprom_wendy2c.s"
-    payload_src = repo_root / "hello_ram_4000_wendy2c.s"
+    boot_src = repo_root / "firmware" / "boards" / "wendy2" / "upload_and_run_eeprom_wendy2c.s"
+    payload_src = repo_root / "firmware" / "programs" / "wendy2" / "hello_ram_4000_wendy2c.s"
     boot_rom = out_dir / "wendy2c_boot.bin"
     payload_bin = out_dir / "payload.bin"
     framed = out_dir / "payload.framed"

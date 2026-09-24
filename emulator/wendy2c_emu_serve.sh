@@ -104,14 +104,14 @@ fi
 
 # Assemble the boot ROM if it's missing or older than its source.
 BOOT_BIN="$OUT_DIR/wendy2c_boot.bin"
-BOOT_SRC="$REPO_ROOT/upload_and_run_eeprom_wendy2c.s"
+BOOT_SRC="$REPO_ROOT/firmware/boards/wendy2/upload_and_run_eeprom_wendy2c.s"
 if [ ! -f "$BOOT_BIN" ] || [ "$BOOT_SRC" -nt "$BOOT_BIN" ] || \
-        [ "$REPO_ROOT/upload_and_run.inc" -nt "$BOOT_BIN" ]; then
+        [ "$REPO_ROOT/firmware/lib/serial/upload_and_run.inc" -nt "$BOOT_BIN" ]; then
     echo ">> assembling boot ROM ($BOOT_SRC)"
     log="$OUT_DIR/boot.vasm.log"
-    if ! (cd "$REPO_ROOT" && "$VASM" -wdc02 -wfail -Fbin -dotdir \
+    if ! (cd "$REPO_ROOT" && firmware/vasm -wdc02 -wfail -Fbin -dotdir \
             -ignore-mult-inc -esc -o "$BOOT_BIN" \
-            upload_and_run_eeprom_wendy2c.s) >"$log" 2>&1; then
+            "$BOOT_SRC") >"$log" 2>&1; then
         echo "error: boot ROM assembly failed (full log: $log):" >&2
         cat "$log" >&2
         exit 1

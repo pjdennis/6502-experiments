@@ -16,7 +16,7 @@ REPO="$PROG8/../.."                            # repo root
 JAR="${PROG8C:-/tmp/prog8c.jar}"
 EMU="$REPO/emulator/emulator.out"
 UPLOAD="$REPO/emulator/wendy2_upload.py"
-BOOT_SRC="$REPO/upload_and_run_eeprom_wendy2c.s"
+BOOT_SRC="$REPO/firmware/boards/wendy2/upload_and_run_eeprom_wendy2c.s"
 CAP="${2:-3000000}"
 
 SRC="$1"; [ -n "$SRC" ] || { echo "usage: $0 demos/foo.p8 [cyclecap]"; exit 2; }
@@ -32,7 +32,7 @@ python3 "$UPLOAD" "$OUT/$base.bin" -o "$OUT/$base.framed" >/dev/null
 
 # 3. build the wendy2c boot ROM once (cwd = REPO so the .include paths resolve)
 BOOT="$HERE/out/wendy2c_boot.bin"
-[ -f "$BOOT" ] || ( cd "$REPO" && vasm6502_oldstyle -wdc02 -wfail -Fbin -dotdir \
+[ -f "$BOOT" ] || ( cd "$REPO" && firmware/vasm -wdc02 -wfail -Fbin -dotdir \
         -ignore-mult-inc -esc -o "$BOOT" "$BOOT_SRC" ) >/dev/null
 
 # 4. run; the emulator prints the final LCD frame on stderr
