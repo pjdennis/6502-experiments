@@ -73,6 +73,13 @@ class FirmwareManifestTest(unittest.TestCase):
         # same source, assembled from its own directory, gives the same bytes
         self.assertEqual(entries['sub/other.s'], entries['good.s'])
 
+    def test_update_records_the_assembler_version(self):
+        self.tool('update')
+        with open(self.manifest) as f:
+            header = [l for l in f if l.startswith('# assembler: ')]
+        self.assertEqual(len(header), 1)
+        self.assertRegex(header[0], r'^# assembler: vasm \d+\.\d+\w*')
+
     def test_check_passes_when_nothing_changed(self):
         self.tool('update')
         result = self.tool('check')
