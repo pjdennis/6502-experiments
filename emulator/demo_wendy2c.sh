@@ -52,7 +52,7 @@
 # Requires:
 #   - vasm6502_oldstyle on PATH
 #   - python3 on PATH
-#   - the emulator built (cd assembler2 && make)
+#   - the emulator built (make, from the repository root)
 #   - run from the repo root
 
 set -e
@@ -101,8 +101,7 @@ if [ "$LIVE" -eq 1 ] && [ "$WEB" -eq 1 ]; then
     echo "error: --live and --web are mutually exclusive" >&2; exit 1
 fi
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-ASM2="$REPO_ROOT/assembler2"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-/tmp/wendy2c-demo}"
 mkdir -p "$OUT_DIR"
 
@@ -144,10 +143,10 @@ echo ">> assembling payload ($PAYLOAD_SRC)"
 run_vasm "$OUT_DIR/payload.bin" "$PAYLOAD_SRC"
 
 echo ">> framing payload"
-python3 "$ASM2/emulator/wendy2_upload.py" \
+python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT_DIR/payload.bin" -o "$OUT_DIR/payload.framed"
 
-cd "$ASM2"
+cd "$REPO_ROOT"
 
 # Build common emulator args. POSIX sh doesn't have arrays, but `set --`
 # rebuilds the positional parameters and "$@" preserves arg boundaries

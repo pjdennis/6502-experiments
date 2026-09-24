@@ -134,7 +134,7 @@ differs (stmt.p8 serializes the AST, p1.p8 emits assembly).
     python3 -m p8c p1/lexer.p8 -o /tmp/lexer.s
     vasm6502_oldstyle -Fbin -dotdir -ignore-mult-inc -esc -wfail \
         -o /tmp/lexer.bin /tmp/lexer.s
-    assembler2/emulator/emulator.out /tmp/lexer.bin SOURCE.p8 /tmp/out.dump --no-dump
+    emulator/emulator.out /tmp/lexer.bin SOURCE.p8 /tmp/out.dump --no-dump
     diff <(python3 -m p8c SOURCE.p8 --dump-tokens) /tmp/out.dump
 
 ## Notes

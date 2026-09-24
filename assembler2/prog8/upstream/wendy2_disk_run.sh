@@ -10,8 +10,8 @@ set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROG8="$HERE/.."; ASM2="$PROG8/.."; REPO="$ASM2/.."
 JAR="${PROG8C:-/tmp/prog8c.jar}"
-EMU="$ASM2/emulator/emulator.out"
-UPLOAD="$ASM2/emulator/wendy2_upload.py"
+EMU="$ASM2/../emulator/emulator.out"
+UPLOAD="$ASM2/../emulator/wendy2_upload.py"
 BOOT_SRC="$REPO/upload_and_run_eeprom_wendy2c.s"
 
 SRC="$1"; DISK="$2"; CAP="${3:-3000000}"

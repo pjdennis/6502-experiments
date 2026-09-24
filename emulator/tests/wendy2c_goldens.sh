@@ -16,8 +16,8 @@
 
 set -eu
 
-REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-EMU="$REPO_ROOT/assembler2/emulator/emulator.out"
+REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+EMU="$REPO_ROOT/emulator/emulator.out"
 OUT="${OUT_DIR:-/tmp/wendy2c-goldens}"
 VASM=vasm6502_oldstyle
 
@@ -59,7 +59,7 @@ run_case() {
 
     echo "wendy2c_goldens: case $name"
     run_vasm "$OUT/$name.bin" "$REPO_ROOT/$payload_src"
-    python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+    python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
         "$OUT/$name.bin" -o "$OUT/$name.framed" >"$OUT/$name.upload.log"
 
     "$EMU" "$OUT/boot.bin" \

@@ -73,7 +73,7 @@ def build_artifacts(repo_root, out_dir):
     if not run_vasm(boot_src,    boot_rom,    out_dir / "boot.vasm.log"):    return None
     if not run_vasm(payload_src, payload_bin, out_dir / "cgram.vasm.log"):  return None
 
-    framer = repo_root / "assembler2" / "emulator" / "wendy2_upload.py"
+    framer = repo_root / "emulator" / "wendy2_upload.py"
     r = subprocess.run(
         ["python3", str(framer), str(payload_bin), "-o", str(framed)],
         capture_output=True, text=True
@@ -96,7 +96,7 @@ def run_test(base_dir, verbose=False, keep=False):
         print(f"  {Colors.RED}FAIL{Colors.NC} web UI test: emulator not built at {emulator}")
         return False
 
-    repo_root = base_dir.parent
+    repo_root = base_dir
     out_dir = Path("/tmp") / "wendy2c-web-test"
     out_dir.mkdir(exist_ok=True)
     for f in out_dir.glob("*.png"):
@@ -304,7 +304,7 @@ def main():
     args = parser.parse_args()
     if not sys.stdout.isatty(): Colors.disable()
 
-    base_dir = Path(__file__).resolve().parent.parent.parent  # .../assembler2
+    base_dir = Path(__file__).resolve().parent.parent.parent  # repository root
     print("=" * 60)
     print("wendy2c web UI test (HTTP+WS + Playwright)")
     print("=" * 60)

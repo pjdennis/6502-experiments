@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 P1 = HERE.parent
 PROG8 = P1.parent
 REPO = PROG8.parents[1]
-EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+EMU = REPO / "emulator" / "emulator.out"
 EXPR_SRC = P1 / "expr.p8"
 
 sys.path.insert(0, str(PROG8))

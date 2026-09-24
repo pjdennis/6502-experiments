@@ -80,7 +80,7 @@ def build_artifacts(repo_root, out_dir):
     if not run_vasm(payload_src, payload_bin, out_dir / "payload.vasm.log"):
         return None
 
-    framer = repo_root / "assembler2" / "emulator" / "wendy2_upload.py"
+    framer = repo_root / "emulator" / "wendy2_upload.py"
     result = subprocess.run(
         ["python3", str(framer), str(payload_bin), "-o", str(framed)],
         capture_output=True, text=True
@@ -144,7 +144,7 @@ def run_test(base_dir, verbose=False):
               f"emulator not built at {emulator}")
         return False
 
-    repo_root = base_dir.parent
+    repo_root = base_dir
     out_dir = Path("/tmp") / "wendy2c-live-sigint-test"
     out_dir.mkdir(exist_ok=True)
 
@@ -256,7 +256,7 @@ def main():
         Colors.disable()
 
     base_dir = Path(__file__).resolve().parent.parent.parent
-    # base_dir = .../assembler2
+    # base_dir = repository root
 
     print("=" * 60)
     print("wendy2c --live SIGINT cursor-restore test")

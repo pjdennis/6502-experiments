@@ -22,7 +22,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 UP = HERE.parent
 ASM2 = UP.parents[1]
-EMU = ASM2 / "emulator" / "emulator.out"
+EMU = ASM2.parent / "emulator" / "emulator.out"
 JAR = Path(os.environ.get("PROG8C", "/tmp/prog8c.jar"))
 GOLDENS = HERE / "goldens"
 

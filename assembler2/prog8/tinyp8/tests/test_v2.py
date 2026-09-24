@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 TP8 = HERE.parent
 PROG8 = TP8.parent
 REPO = PROG8.parents[1]
-EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+EMU = REPO / "emulator" / "emulator.out"
 TINYP8_P8_SRC = TP8 / "tinyp8.p8"
 GOLDENS_V2 = HERE / "goldens_v2"
 

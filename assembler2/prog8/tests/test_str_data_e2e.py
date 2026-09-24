@@ -23,7 +23,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PROG8 = HERE.parent
 REPO = PROG8.parents[1]
-EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+EMU = REPO / "emulator" / "emulator.out"
 
 _SHIM = """%address $0200
 %output raw

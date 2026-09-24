@@ -24,7 +24,7 @@ _tr_*.tmp
 # Greatest / sanitizer test build directory. The *.out binaries are
 # already covered by the *.out wildcard above; the build/run logs and
 # results files aren't.
-assembler2/emulator/tests/out/
+emulator/tests/out/
 
 # Local-only webcam capture helper -- paths and camera names are
 # specific to one machine; not appropriate to version.

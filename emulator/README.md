@@ -1,4 +1,4 @@
-# `assembler2/emulator/`
+# `emulator/`
 
 A two-machine 6502 emulator:
 
@@ -16,8 +16,11 @@ bootstrap chain changed when the wendy2c work landed.
 
 ## Building and testing
 
+Run these from the repository root (the tests open `emulator/...` paths
+relative to the current directory):
+
 ```bash
-make                     # build emulator/emulator.out + bootstrap asm
+make                     # build emulator/emulator.out
 make test                # C unit tests + wendy2c golden-LCD tests
 make wendy2c-goldens     # just the wendy2c end-to-end tests
 make harte               # Tom-Harte ProcessorTests (opt-in; needs data)
@@ -73,8 +76,8 @@ flags like `-ignore-mult-inc` will abort cleanly.
 Pass `--live` to launch straight into the live render instead:
 
 ```sh
-bash assembler2/emulator/demo_wendy2c.sh --live
-DEMO_PAYLOAD=wendy2c_led_test.s bash assembler2/emulator/demo_wendy2c.sh --live
+bash emulator/demo_wendy2c.sh --live
+DEMO_PAYLOAD=wendy2c_led_test.s bash emulator/demo_wendy2c.sh --live
 ```
 
 `--live` runs uncapped (`DEMO_CYCLE_CAP` still overrides if you want a

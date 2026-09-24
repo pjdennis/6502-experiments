@@ -5,8 +5,8 @@ emulator's HD44780 A00 ROM tables so the emulator renders text exactly
 the way the physical panel does.
 
 Updates the 5x8 and 5x10 ROM arrays in:
-  assembler2/emulator/chips/hd44780_a00_font.h
-  assembler2/emulator/web/hd44780_a00_font.js
+  emulator/chips/hd44780_a00_font.h
+  emulator/web/hd44780_a00_font.js
 
 5x8 covers codes 0x20..0xFF; 5x10 covers codes 0xE0..0xFF (only valid
 range in HD44780 5x10 single-line mode).
@@ -24,8 +24,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 CALIB_JSON = REPO_ROOT / "lcd_calibration.json"
-C_HEADER = REPO_ROOT / "assembler2/emulator/chips/hd44780_a00_font.h"
-JS_FILE = REPO_ROOT / "assembler2/emulator/web/hd44780_a00_font.js"
+C_HEADER = REPO_ROOT / "emulator/chips/hd44780_a00_font.h"
+JS_FILE = REPO_ROOT / "emulator/web/hd44780_a00_font.js"
 
 def _row_pattern(n_bytes: int) -> re.Pattern:
     byte_re = r"0x[0-9a-fA-F]{2}"

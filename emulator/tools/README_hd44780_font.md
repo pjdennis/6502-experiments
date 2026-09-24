@@ -6,12 +6,12 @@ charset from page 17 of the Hitachi datasheet.
 
 The generated artifacts are committed to the repo:
 
-* `assembler2/emulator/chips/hd44780_a00_font.h`
+* `emulator/chips/hd44780_a00_font.h`
   C arrays `hd44780_a00_font_5x8[256][8]` and `hd44780_a00_font_5x10[32][10]`.
   Each glyph byte's low 5 bits encode one dot row; bit 4 is the
   leftmost pixel.
 
-* `assembler2/emulator/web/hd44780_a00_font.js`
+* `emulator/web/hd44780_a00_font.js`
   The same two tables, base64-encoded into a small JS module that
   defines `window.HD44780_A00 = { font5x8, font5x10 }` as `Uint8Array`s.
 
@@ -30,10 +30,10 @@ curl -L -o /tmp/hd44780/HD44780.pdf https://eater.net/datasheets/HD44780.pdf
 pdftoppm -r 300 /tmp/hd44780/HD44780.pdf /tmp/hd44780/page17 -f 17 -l 17 -png
 
 # 3) Run the extractor (auto-detects the table grid; emits both files):
-python3 assembler2/emulator/tools/extract_hd44780_font.py \
+python3 emulator/tools/extract_hd44780_font.py \
     /tmp/hd44780/page17-17.png \
-    -o   assembler2/emulator/chips/hd44780_a00_font.h \
-    --js assembler2/emulator/web/hd44780_a00_font.js
+    -o   emulator/chips/hd44780_a00_font.h \
+    --js emulator/web/hd44780_a00_font.js
 ```
 
 ## How it works
@@ -50,7 +50,7 @@ python3 assembler2/emulator/tools/extract_hd44780_font.py \
   literal "CG RAM (n)" labels there, not glyph data, so the script
   zeros those entries.
 
-`assembler2/emulator/tests/test_hd44780_font.c` spot-checks the
+`emulator/tests/test_hd44780_font.c` spot-checks the
 generated header against well-known canonical glyphs ('0', 'A', the
 all-on 0xFF block, F0 descender). If a regeneration alters the bits
 the test fires immediately.

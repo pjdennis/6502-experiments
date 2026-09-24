@@ -34,7 +34,7 @@
 #
 # Requires:
 #   - vasm6502_oldstyle on PATH
-#   - the emulator built (cd assembler2 && make)
+#   - the emulator built (make, from the repository root)
 #   - run from any directory; paths are resolved relative to this script
 
 set -e
@@ -86,9 +86,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-ASM2="$REPO_ROOT/assembler2"
-EMU="$ASM2/emulator/emulator.out"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+EMU="$REPO_ROOT/emulator/emulator.out"
 OUT_DIR="${OUT_DIR:-/tmp/wendy2c-emu-serve}"
 mkdir -p "$OUT_DIR"
 
@@ -99,7 +98,7 @@ command -v "$VASM" >/dev/null 2>&1 || {
 }
 
 if [ ! -x "$EMU" ]; then
-    echo "error: emulator not built at $EMU; run 'cd $ASM2 && make'" >&2
+    echo "error: emulator not built at $EMU; run 'make' in $REPO_ROOT" >&2
     exit 1
 fi
 
@@ -133,14 +132,14 @@ if [ "$WEB" -eq 1 ]; then
     echo ">> launching emulator (--web on port $WEB_PORT)"
     echo "   serial-link socket: $SOCK"
     echo "   upload from another terminal:"
-    echo "     $ASM2/emulator/compile_and_upload_wendy2c_emu.sh foo.s --sock $SOCK"
+    echo "     $REPO_ROOT/emulator/compile_and_upload_wendy2c_emu.sh foo.s --sock $SOCK"
     set -- "$@" --web --web-port "$WEB_PORT"
     [ -n "$WEB_BIND" ] && set -- "$@" --web-bind "$WEB_BIND"
 elif [ "$LIVE" -eq 1 ]; then
     echo ">> launching emulator (--live)"
     echo "   serial-link socket: $SOCK"
     echo "   upload from another terminal:"
-    echo "     $ASM2/emulator/compile_and_upload_wendy2c_emu.sh foo.s --sock $SOCK"
+    echo "     $REPO_ROOT/emulator/compile_and_upload_wendy2c_emu.sh foo.s --sock $SOCK"
     set -- "$@" --live
 fi
 

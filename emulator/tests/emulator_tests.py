@@ -15,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from persistent_emulator import PersistentEmulator
 
 
@@ -36,7 +36,7 @@ class EmulatorTestRunner:
         self.verbose = verbose
         self.filter_pattern = filter_pattern
         self.emulator = base_dir / "emulator" / "emulator.out"
-        self.assembler = base_dir / "17" / "out" / "asm.out"
+        self.assembler = base_dir / "assembler2" / "17" / "out" / "asm.out"
         self.passed = 0
         self.failed = 0
         self.skipped = 0

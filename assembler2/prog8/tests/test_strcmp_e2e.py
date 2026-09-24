@@ -13,7 +13,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve()
 PROG8 = HERE.parent.parent
 REPO = PROG8.parent.parent
-EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+EMU = REPO / "emulator" / "emulator.out"
 
 # Reuse the shim from the sibling e2e test, with `%import strings` added.
 # Load the sibling by file path so its _SHIM is the executed (escape-resolved)

@@ -15,7 +15,7 @@
 # large p8c-compilation sanity check below.)
 set -e
 cd "$(dirname "$0")"
-EMU=../emulator/emulator.out
+EMU=../../emulator/emulator.out
 CAP=30000000000
 
 python3 -m p8c --target nmos p1/p1_pass1_sh.p8 -o /tmp/_p1.s >/dev/null 2>&1

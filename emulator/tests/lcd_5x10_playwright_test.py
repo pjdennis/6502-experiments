@@ -65,7 +65,7 @@ def build_artifacts(repo_root, out_dir):
     if not run_vasm(boot_src,    boot_rom,    out_dir / "boot.vasm.log"):       return None
     if not run_vasm(payload_src, payload_bin, out_dir / "lcd5x10.vasm.log"):   return None
 
-    framer = repo_root / "assembler2" / "emulator" / "wendy2_upload.py"
+    framer = repo_root / "emulator" / "wendy2_upload.py"
     r = subprocess.run(
         ["python3", str(framer), str(payload_bin), "-o", str(framed)],
         capture_output=True, text=True
@@ -88,7 +88,7 @@ def run_test(base_dir, verbose=False):
         print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: emulator not built at {emulator}")
         return False
 
-    repo_root = base_dir.parent
+    repo_root = base_dir
     out_dir = Path("/tmp") / "wendy2c-lcd5x10-test"
     out_dir.mkdir(exist_ok=True)
     for f in out_dir.glob("*.png"): f.unlink()

@@ -20,7 +20,7 @@
 # Prereqs: /tmp/prog8c.jar (upstream prog8c), vasm6502_oldstyle, the emulator.
 set -e
 cd "$(dirname "$0")/.."                       # .../assembler2/prog8
-EMU=../emulator/emulator.out
+EMU=../../emulator/emulator.out
 JAR=${PROG8C:-/tmp/prog8c.jar}
 CAP=30000000000
 W=/tmp/sh_fixpoint; rm -rf "$W"; mkdir -p "$W"

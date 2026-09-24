@@ -41,7 +41,8 @@ asm2() {
 }
 
 emulator() {
-  make -C assembler2 test
+  # Emulator C tests + wendy2c goldens (repo root), then the prog8 suites.
+  make test && make -C assembler2 test
 }
 
 suites=("$@")

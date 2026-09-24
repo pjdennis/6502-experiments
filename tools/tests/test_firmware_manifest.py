@@ -116,8 +116,8 @@ class FirmwareManifestTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('assembler', result.stdout)
 
-    def test_default_excludes_skip_attic_and_assemblers(self):
-        for d in ('attic', 'assembler', 'assembler2'):
+    def test_default_excludes_skip_non_firmware_dirs(self):
+        for d in ('attic', 'assembler', 'assembler2', 'emulator'):
             self.write(f'{d}/parked.s', BAD)
         result = run('update', '--root', self.root, '--manifest', self.manifest)
         self.assertEqual(result.returncode, 0, result.stderr)

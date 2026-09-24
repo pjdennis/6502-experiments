@@ -31,7 +31,7 @@ HERE = Path(__file__).resolve().parent           # tinyp8/tests
 TP8 = HERE.parent                                  # tinyp8/
 PROG8 = TP8.parent                                 # prog8/
 REPO = PROG8.parents[1]                            # repo root
-EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+EMU = REPO / "emulator" / "emulator.out"
 GOLDENS = HERE / "goldens"
 
 

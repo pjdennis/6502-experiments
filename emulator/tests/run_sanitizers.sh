@@ -10,9 +10,8 @@
 
 set -eu
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-ASM2="$REPO_ROOT/assembler2"
-cd "$ASM2"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$REPO_ROOT"
 
 OUT="emulator/tests/out/san"
 mkdir -p "$OUT"
@@ -75,13 +74,13 @@ test_web_smoke|emulator/tests/test_web_smoke.c emulator/wendy2c_web.c emulator/w
 # exit so the script can keep reporting.
 export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_leaks=1:halt_on_error=1:strict_string_checks=1:detect_stack_use_after_return=1}"
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1:print_stacktrace=1}"
-export LSAN_OPTIONS="${LSAN_OPTIONS:-suppressions=$ASM2/emulator/tests/lsan_suppressions.txt:print_suppressions=0}"
+export LSAN_OPTIONS="${LSAN_OPTIONS:-suppressions=$REPO_ROOT/emulator/tests/lsan_suppressions.txt:print_suppressions=0}"
 
 # A few benign leaks live in third-party code we vendor (miniaudio loads
 # ALSA/PulseAudio via dlopen and leaks one fd-set each at startup). The
 # suppressions file lets us skip those without hiding our own leaks.
-if [ ! -f "$ASM2/emulator/tests/lsan_suppressions.txt" ]; then
-    cat > "$ASM2/emulator/tests/lsan_suppressions.txt" <<'EOF'
+if [ ! -f "$REPO_ROOT/emulator/tests/lsan_suppressions.txt" ]; then
+    cat > "$REPO_ROOT/emulator/tests/lsan_suppressions.txt" <<'EOF'
 # Third-party / system leaks we don't intend to chase. Any leak whose
 # stack contains one of these substrings is silenced.
 leak:libasound

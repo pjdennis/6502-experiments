@@ -12,7 +12,7 @@ set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROG8="$HERE/.."; ASM2="$PROG8/.."; REPO="$ASM2/.."
 JAR="${PROG8C:-/tmp/prog8c.jar}"
-EMU="$ASM2/emulator/emulator.out"
+EMU="$ASM2/../emulator/emulator.out"
 MON_SRC="$REPO/wendy2c_monitor.s"
 
 SRC="$1"; CAP="${2:-4000000}"

@@ -10,8 +10,8 @@
 
 set -eu
 
-REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-EMU="$REPO_ROOT/assembler2/emulator/emulator.out"
+REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+EMU="$REPO_ROOT/emulator/emulator.out"
 OUT="${OUT_DIR:-/tmp/wendy2c-lcd-trace}"
 VASM=vasm6502_oldstyle
 
@@ -42,7 +42,7 @@ run_vasm() {
 echo "lcd_trace_test: building boot ROM + hello payload"
 run_vasm "$OUT/boot.bin"  "$REPO_ROOT/upload_and_run_eeprom_wendy2c.s"
 run_vasm "$OUT/hello.bin" "$REPO_ROOT/hello_ram_4000_wendy2c.s"
-python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/hello.bin" -o "$OUT/hello.framed" >"$OUT/hello.upload.log"
 
 TRACE="$OUT/hello.lcd-trace"

@@ -10,8 +10,8 @@
 
 set -eu
 
-REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-EMU="$REPO_ROOT/assembler2/emulator/emulator.out"
+REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+EMU="$REPO_ROOT/emulator/emulator.out"
 OUT="${OUT_DIR:-/tmp/wendy2c-merge-sort}"
 VASM=vasm6502_oldstyle
 
@@ -73,7 +73,7 @@ assert_trace_contains_in_order() {
 echo "merge_sort_goldens: case cursor_selftest"
 run_vasm "$OUT/cursor.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
     -DSELFTEST_CURSORS=1
-python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/cursor.bin" -o "$OUT/cursor.framed" >"$OUT/cursor.upload.log"
 
 TRACE="$OUT/cursor.lcd-trace"
@@ -98,7 +98,7 @@ echo "  PASS cursor_selftest"
 echo "merge_sort_goldens: case fill_selftest"
 run_vasm "$OUT/fill.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
     -DSELFTEST_FILL=1 -DN_ELEMENTS=8
-python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/fill.bin" -o "$OUT/fill.framed" >"$OUT/fill.upload.log"
 
 TRACE="$OUT/fill.lcd-trace"
@@ -129,7 +129,7 @@ run_sort_selftest() {
     echo "merge_sort_goldens: case sort_selftest_n${n}"
     run_vasm "$OUT/sort_n${n}.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
         -DSELFTEST_SORT=1 -DN_ELEMENTS=$n
-    python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+    python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
         "$OUT/sort_n${n}.bin" -o "$OUT/sort_n${n}.framed" \
         >"$OUT/sort_n${n}.upload.log"
 
@@ -157,7 +157,7 @@ run_sort_selftest 20
 echo "merge_sort_goldens: case end_to_end_n64"
 run_vasm "$OUT/e2e.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
     -DN_ELEMENTS=64
-python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
     "$OUT/e2e.bin" -o "$OUT/e2e.framed" >"$OUT/e2e.upload.log"
 
 TRACE="$OUT/e2e.lcd-trace"
@@ -192,7 +192,7 @@ echo "  PASS end_to_end_n64"
 if [ "${MERGE_SORT_FULL_N:-0}" = "1" ]; then
     echo "merge_sort_goldens: case full_n57344 (slow)"
     run_vasm "$OUT/full.bin" "$REPO_ROOT/wendy2_merge_sort.s"
-    python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+    python3 "$REPO_ROOT/emulator/wendy2_upload.py" \
         "$OUT/full.bin" -o "$OUT/full.framed" >"$OUT/full.upload.log"
 
     TRACE="$OUT/full.lcd-trace"

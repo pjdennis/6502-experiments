@@ -14,8 +14,8 @@
 
 set -eu
 
-REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-EMU="$REPO_ROOT/assembler2/emulator/emulator.out"
+REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+EMU="$REPO_ROOT/emulator/emulator.out"
 OUT="${OUT_DIR:-/tmp/wendy2c-serial-link-test}"
 VASM=vasm6502_oldstyle
 
@@ -70,7 +70,7 @@ run_case() {
     # avoid the worst case wait.
     sleep 0.2
 
-    if ! python3 "$REPO_ROOT/assembler2/emulator/wendy2c_emu_upload.py" \
+    if ! python3 "$REPO_ROOT/emulator/wendy2c_emu_upload.py" \
             "$sock" "$OUT/$name.bin" \
             >"$OUT/$name.upload.log" 2>&1; then
         echo "wendy2c_serial_link: FAIL $name -- upload failed"

@@ -29,7 +29,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+EMU = REPO / "emulator" / "emulator.out"
 TINYP8_SRC = HERE / "tinyp8.s"
 TINYP8_BIN = HERE / "out" / "tinyp8.bin"
 COMPILED_LOAD_ADDR = 0x0200  # where the compiled program runs
